@@ -7,6 +7,23 @@
 use bincode::Options;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
+use thiserror::Error;
+
+/// An error that occurred during a deserialize operation
+///
+/// This could happen because the input data was too short,
+/// or because an invalid value was encountered.
+#[derive(Debug, Error)]
+#[error("deserialize error")]
+pub struct DeserializeError;
+
+/// An error that occurred during a serialize operation
+///
+/// This probably means our [`Write`] failed, e.g. we tried
+/// to write beyond the end of a buffer.
+#[derive(Debug, Error)]
+#[error("serialize error")]
+pub struct SerializeError;
 
 /// A shortcut that defines our method of binary serialization
 ///
@@ -29,13 +46,13 @@ pub trait BinSerDe<'de>: Serialize + Deserialize<'de> + Sized {
     /// Serialize into an existing buffer
     ///
     /// tip: `&mut [u8]` implements `Write`
-    fn bser_into<W: Write>(&self, w: W) -> bincode::Result<()>;
+    fn bser_into<W: Write>(&self, w: W) -> Result<(), SerializeError>;
 
     /// Serialize into a new buffer
-    fn bser(&self) -> bincode::Result<Vec<u8>>;
+    fn bser(&self) -> Result<Vec<u8>, SerializeError>;
 
     /// Deserialize
-    fn bdes(buf: &'de [u8]) -> bincode::Result<Self>;
+    fn bdes(buf: &'de [u8]) -> Result<Self, DeserializeError>;
 }
 
 impl<'de, T> BinSerDe<'de> for T
@@ -43,18 +60,18 @@ where
     T: Serialize + Deserialize<'de> + Sized,
 {
     /// Serialize into an existing buffer
-    fn bser_into<W: Write>(&self, w: W) -> bincode::Result<()> {
-        coder().serialize_into(w, &self)
+    fn bser_into<W: Write>(&self, w: W) -> Result<(), SerializeError> {
+        coder().serialize_into(w, &self).or(Err(SerializeError))
     }
 
     /// Serialize into a new heap-allocated buffer
-    fn bser(&self) -> bincode::Result<Vec<u8>> {
-        coder().serialize(&self)
+    fn bser(&self) -> Result<Vec<u8>, SerializeError> {
+        coder().serialize(&self).or(Err(SerializeError))
     }
 
     /// Deserialize
-    fn bdes(buf: &'de [u8]) -> bincode::Result<Self> {
-        coder().deserialize(buf)
+    fn bdes(buf: &'de [u8]) -> Result<Self, DeserializeError> {
+        coder().deserialize(buf).or(Err(DeserializeError))
     }
 }
 
